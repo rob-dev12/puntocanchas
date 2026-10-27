@@ -1,0 +1,6 @@
+{
+  "name": "Cancha Reserva",
+  "description": "Plataforma de reserva de canchas y organización de partidos exprés con división de pagos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
