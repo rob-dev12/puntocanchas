@@ -1,0 +1,24 @@
+{
+  "version": "5",
+  "redirects": {
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.119.0"
+  },
+  "remote": {
+    "https://esm.sh/@supabase/supabase-js@2.119.0": "5b053344a262b305cfd47fdd75b3d244e47983d70fd7f7e68dc4dbbb98bc90bc"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@supabase/supabase-js@^2.57.4",
+        "npm:@types/react-dom@^19.1.9",
+        "npm:@types/react@^19.1.12",
+        "npm:@vitejs/plugin-react@^5.0.2",
+        "npm:lucide-react@0.468",
+        "npm:react-dom@^19.1.1",
+        "npm:react@^19.1.1",
+        "npm:typescript@~5.8.3",
+        "npm:vite@^7.1.7"
+      ]
+    }
+  }
+}

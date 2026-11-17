@@ -1,29 +1,62 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
-  ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, CalendarDays, Check,
-  ChevronDown, Clock3, Dumbbell, Filter, MapPin, Menu, Plus, Search, ShieldCheck,
-  Sparkles, Star, Trophy, Wallet, X, Zap,
+  ArrowRight, BadgeCheck, Building2, CalendarDays, Info, KeyRound, MapPin, Search,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { ReservationPathway } from "./components/ReservationPathway";
 import { appService } from "./services/appService";
-import type { Action, AppData, Complex, Match, Sport } from "./types";
+import type { AppData, ParticipantPaymentRequest, ReservationLookup, ReservationPlayerInput } from "./types";
 
-type Page = "courts" | "matches" | "bookings" | "wallet";
-type Notice = { kind: "success" | "error"; text: string };
-const sports: Array<"Todos" | Sport> = ["Todos", "Fútbol", "Pádel", "Tenis"];
-const money = (amount: number) => new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(amount);
+const VenueAdmin = lazy(() => import("./components/VenueAdmin").then((module) => ({ default: module.VenueAdmin })));
+
+type Page = "courts" | "bookings" | "manage" | "admin";
+const money = (amount: number) => new Intl.NumberFormat("es-CL", {
+  style: "currency",
+  currency: "CLP",
+  maximumFractionDigits: 0,
+}).format(amount);
+
+function isParticipantPaymentRequest(value: unknown): value is ParticipantPaymentRequest {
+  if (typeof value !== "object" || value === null || !("payment_links" in value) || !Array.isArray(value.payment_links)) return false;
+  return "checkout_url" in value
+    && typeof value.checkout_url === "string"
+    && "expires_at" in value
+    && typeof value.expires_at === "string"
+    && "amount" in value
+    && typeof value.amount === "number"
+    && "email_pending" in value
+    && typeof value.email_pending === "boolean"
+    && value.payment_links.every((link) =>
+      typeof link === "object"
+      && link !== null
+      && "player_id" in link
+      && typeof link.player_id === "string"
+      && "full_name" in link
+      && typeof link.full_name === "string"
+      && "email" in link
+      && typeof link.email === "string"
+      && "amount" in link
+      && typeof link.amount === "number"
+      && "checkout_url" in link
+      && typeof link.checkout_url === "string"
+    );
+}
+
+function mercadoPagoUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && /(^|\.)mercadopago\.(cl|com)$/.test(url.hostname) ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
 
 function App() {
   const [data, setData] = useState<AppData | null>(null);
-  const [page, setPage] = useState<Page>("courts");
-  const [selectedSport, setSelectedSport] = useState<"Todos" | Sport>("Todos");
-  const [query, setQuery] = useState("");
-  const [selectedComplex, setSelectedComplex] = useState<Complex | null>(null);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [mobileMenu, setMobileMenu] = useState(false);
-  const [drawer, setDrawer] = useState(false);
+  const [page, setPage] = useState<Page>(() =>
+    new URLSearchParams(window.location.search).get("page") === "manage" ? "manage" : "courts"
+  );
+  const [paymentReturn] = useState(() => new URLSearchParams(window.location.search).get("payment") === "return");
   const [initError, setInitError] = useState("");
 
   const refresh = useCallback(async () => {
@@ -37,321 +70,260 @@ function App() {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(null), 4200);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
-
-  const runAction = async (action: Action, success: string, destination?: Page) => {
-    setBusy(true);
-    setNotice(null);
-    try {
-      setData(await appService.perform(action));
-      setNotice({ kind: "success", text: success });
-      if (destination) {
-        setPage(destination);
-        setSelectedComplex(null);
-        setSelectedMatch(null);
-      }
-    } catch (error) {
-      setNotice({ kind: "error", text: error instanceof Error ? error.message : "No se pudo completar la operación." });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const navigate = (nextPage: Page) => {
-    setPage(nextPage);
-    setSelectedComplex(null);
-    setSelectedMatch(null);
-    setMobileMenu(false);
-    setDrawer(false);
-  };
-
-  const filteredComplexes = useMemo(() => (data?.complexes ?? []).filter((complex) => {
-    const matchesSport = selectedSport === "Todos" || complex.sport === selectedSport;
-    const matchesQuery = `${complex.name} ${complex.location}`.toLowerCase().includes(query.toLowerCase());
-    return matchesSport && matchesQuery;
-  }), [data, selectedSport, query]);
-  const filteredMatches = (data?.matches ?? []).filter((match) => selectedSport === "Todos" || match.sport === selectedSport);
+  const navigate = (nextPage: Page) => setPage(nextPage);
 
   if (!data) {
     return <main className="loading-screen">
-      <div className="loading-mark"><Dumbbell size={28} /></div>
-      <strong>CANCHA<span>RESERVA</span></strong>
+      <img className="loading-logo" src="/logo-puntoreservas.png" alt="PuntoReservas" width="866" height="288" />
       {initError ? <div className="load-error">
         <p>{initError}</p>
         <button className="button button-lime" onClick={() => void refresh()}>Reintentar</button>
-        {!appService.usesSupabase && <small>Revisa la configuración de Supabase en tu archivo .env.</small>}
-      </div> : <p>Preparando tu próximo partido…</p>}
+        {!appService.usesSupabase && <small>Configura la conexión a Supabase para cargar recintos reales.</small>}
+      </div> : <p>Preparando tu próximo juego…</p>}
     </main>;
   }
 
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${mobileMenu ? "sidebar-open" : ""}`}>
-        <a className="brand" href="#" onClick={(event) => { event.preventDefault(); navigate("courts"); }}>
-          <div className="brand-mark"><Dumbbell size={23} strokeWidth={2.5} /></div>
-          <span>cancha<span className="brand-accent">reserva</span><small>JUEGA A TU MANERA</small></span>
-        </a>
-        <div className="side-label">MENÚ PRINCIPAL</div>
-        <nav className="side-nav">
-          <NavButton active={page === "courts"} icon={<Search size={18} />} label="Explorar canchas" onClick={() => navigate("courts")} />
-          <NavButton active={page === "matches"} icon={<Zap size={18} />} label="Partidos exprés" count={data.matches.filter((match) => match.slotsTaken < match.slotsTotal).length} onClick={() => navigate("matches")} />
-          <NavButton active={page === "bookings"} icon={<CalendarDays size={18} />} label="Mis reservas" onClick={() => navigate("bookings")} />
-          <NavButton active={page === "wallet"} icon={<Wallet size={18} />} label="Mi monedero" onClick={() => navigate("wallet")} />
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="sidebar-promo">
-            <span className="promo-icon"><Trophy size={18} /></span>
-            <strong>El juego mejora<br />cuando se comparte.</strong>
-            <p>Invita a tu equipo y completa el partido.</p>
-            <button onClick={() => navigate("matches")}>Ver partidos <ArrowRight size={14} /></button>
-          </div>
-          <button className="profile-link" onClick={() => navigate("wallet")}>
-            <Avatar name={data.profile.name} />
-            <span><strong>{data.profile.name}</strong><small>Jugador amateur</small></span>
-            <ChevronDown size={16} />
-          </button>
-        </div>
-      </aside>
-
-      {mobileMenu && <button className="mobile-backdrop" aria-label="Cerrar menú" onClick={() => setMobileMenu(false)} />}
       <main className="main-area">
         <header className="topbar">
-          <button className="mobile-menu-button icon-button" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Abrir menú"><Menu size={20} /></button>
-          <div className="breadcrumb"><span>Inicio</span><span className="crumb-slash">/</span><strong>{selectedComplex ? selectedComplex.name : pageTitle(page)}</strong></div>
+          <a className="brand brand-image" href="#" onClick={(event) => { event.preventDefault(); navigate("courts"); }}>
+            <img src="/logo-puntoreservas.png" alt="PuntoReservas" width="866" height="288" />
+          </a>
+          <nav className="top-nav" aria-label="Navegación principal">
+            <NavButton active={page === "courts"} icon={<Search size={17} />} label="Explorar" onClick={() => navigate("courts")} />
+            <NavButton active={page === "bookings"} icon={<CalendarDays size={17} />} label="Mis reservas" onClick={() => navigate("bookings")} />
+            <NavButton active={page === "manage"} icon={<KeyRound size={17} />} label="Gestionar" ariaLabel="Gestionar / Modificar Reserva" onClick={() => navigate("manage")} />
+            <NavButton active={page === "admin"} icon={<Building2 size={17} />} label="Recintos" onClick={() => navigate("admin")} />
+          </nav>
           <div className="topbar-right">
-            <div className="location-pill"><MapPin size={15} /><span>Santiago, Chile</span><ChevronDown size={13} /></div>
-            <button className="wallet-pill" onClick={() => navigate("wallet")}><Wallet size={16} /><span>{money(data.profile.walletBalance)}</span><ArrowUpRight size={13} /></button>
-            <button className="top-avatar" onClick={() => navigate("wallet")} aria-label="Abrir perfil"><Avatar name={data.profile.name} /></button>
+            <div className="location-pill"><MapPin size={15} /><span>Chile</span></div>
           </div>
         </header>
 
         <div className="content-wrap">
-          {page === "courts" && (selectedComplex
-            ? <ComplexDetail complex={data.complexes.find((item) => item.id === selectedComplex.id) ?? selectedComplex} busy={busy} onBack={() => setSelectedComplex(null)} onCreate={() => setDrawer(true)} onBook={(schedule) => void runAction({ type: "book", complexId: selectedComplex.id, schedule }, "¡Cancha reservada! La encontrarás en tus reservas.", "bookings")} />
-            : <section>
-              <div className="hero">
-                <div className="hero-content">
-                  <div className="eyebrow"><span className="live-dot" /> TU PRÓXIMO PARTIDO EMPIEZA AQUÍ</div>
-                  <h1>Encuentra tu<br />lugar en la cancha<span>.</span></h1>
-                  <p>Reserva una cancha o súmate a un partido.<br className="desktop-break" /> El juego se vive mejor en equipo.</p>
-                  <div className="hero-actions">
-                    <button className="button button-lime" onClick={() => document.getElementById("court-list")?.scrollIntoView({ behavior: "smooth" })}>Explorar canchas <ArrowRight size={16} /></button>
-                    <button className="button button-ghost" onClick={() => navigate("matches")}><Zap size={15} /> Buscar partido</button>
-                  </div>
-                  <div className="hero-metrics">
-                    <div><strong>+2.4k</strong><span>jugadores activos</span></div>
-                    <i />
-                    <div><strong>4.9<span className="star">★</span></strong><span>valoración media</span></div>
-                    <i />
-                    <div><strong>12</strong><span>canchas cerca</span></div>
-                  </div>
-                </div>
-                <div className="hero-image">
-                  <div className="hero-image-overlay" />
-                  <div className="hero-image-tag"><span className="pulse-dot" /> DISPONIBLE HOY</div>
-                  <div className="hero-image-caption"><span>01 — 04</span><strong>La cancha<br />te está esperando.</strong></div>
-                  <span className="hero-image-sport">PADEL / SANTIAGO</span>
-                </div>
-                <div className="hero-vertical">SPORTS CLUB — SANTIAGO DE CHILE</div>
-              </div>
-
-              <div className="stats-strip">
-                <div><span className="stats-icon"><MapPin size={17} /></span><span><strong>Explora cerca</strong><small>Los mejores clubes de Santiago</small></span></div>
-                <div><span className="stats-icon"><Zap size={17} /></span><span><strong>Únete al partido</strong><small>Comparte cancha, divide el costo</small></span></div>
-                <div><span className="stats-icon"><ShieldCheck size={17} /></span><span><strong>Reserva segura</strong><small>Tu pago, siempre protegido</small></span></div>
-              </div>
-
-              <div className="section-heading" id="court-list">
-                <div><div className="section-kicker">ENCUENTRA TU JUEGO</div><h2>Canchas para <span>disfrutar.</span></h2><p>Elige tu deporte y descubre tu próximo destino.</p></div>
-                <button className="text-button" onClick={() => setSelectedSport("Todos")}>Ver todas <ArrowRight size={15} /></button>
-              </div>
-              <div className="search-filter-row">
-                <label className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Busca por cancha o comuna..." /><kbd>⌘ K</kbd></label>
-                <div className="filter-label"><Filter size={15} /> DEPORTE</div>
-                <div className="sport-filters">
-                  {sports.map((sport) => <button key={sport} className={`filter-chip ${selectedSport === sport ? "filter-active" : ""}`} onClick={() => setSelectedSport(sport)}>{sport === "Todos" ? "Todos" : <>{sportEmoji(sport)} {sport}</>}</button>)}
-                </div>
-              </div>
-              <div className="complex-grid">
-                {filteredComplexes.map((complex, index) => <ComplexCard key={complex.id} complex={complex} index={index} onClick={() => setSelectedComplex(complex)} />)}
-              </div>
-              {!filteredComplexes.length && <EmptyState title="No encontramos canchas" description="Prueba con otro nombre o deporte." />}
-            </section>
-          )}
-
-          {page === "matches" && (selectedMatch
-            ? <MatchDetail match={data.matches.find((item) => item.id === selectedMatch.id) ?? selectedMatch} profileName={data.profile.name} busy={busy} onBack={() => setSelectedMatch(null)} onJoin={() => void runAction({ type: "join", matchId: selectedMatch.id }, "¡Ya tienes tu cupo! Nos vemos en la cancha.", "bookings")} />
-            : <section>
-              <PageIntro eyebrow="JUEGA EN EQUIPO" title={<>Partidos <span>exprés.</span></>} description="Hay un lugar para ti. Súmate a un partido y paga solo tu parte." action={<span className="live-status"><span className="pulse-dot" /> {filteredMatches.length} partidos abiertos</span>} />
-              <div className="filter-row match-filters">
-                <span className="filter-label"><Filter size={15} /> DEPORTE</span>
-                {sports.map((sport) => <button key={sport} className={`filter-chip ${selectedSport === sport ? "filter-active" : ""}`} onClick={() => setSelectedSport(sport)}>{sport === "Todos" ? "Todos" : <>{sportEmoji(sport)} {sport}</>}</button>)}
-              </div>
-              <div className="match-grid">{filteredMatches.map((match, index) => <MatchCard key={match.id} match={match} index={index} onClick={() => setSelectedMatch(match)} />)}</div>
-              {!filteredMatches.length && <EmptyState title="No hay partidos con ese filtro" description="Prueba con otro deporte o crea un partido desde la sección de canchas." />}
-            </section>
-          )}
-
+          {paymentReturn && <div className="payment-return-notice" role="status"><Info size={17} /><span>Volviste desde Mercado Pago. La aprobación se confirma de forma segura cuando recibimos su notificación; este regreso por sí solo no confirma una reserva.</span></div>}
+          {page === "courts" && <ReservationPathway
+            complexes={data.complexes}
+            onLoadCourts={appService.listCourts}
+            onLoadAvailability={appService.getAvailability}
+            onCreateCheckout={appService.createReservationCheckout}
+          />}
           {page === "bookings" && <section>
-            <PageIntro eyebrow="TU ACTIVIDAD" title={<>Mis <span>reservas.</span></>} description="Todos tus partidos y canchas en un mismo lugar." />
-            <div className="booking-summary"><div className="summary-icon"><CalendarDays size={20} /></div><div><strong>{data.bookings.length} reservas</strong><small>Tu historial deportivo</small></div><span className="summary-total">{money(data.bookings.reduce((sum, item) => sum + item.pricePaid, 0))}<small> invertidos</small></span></div>
+            <PageIntro eyebrow="TU ACTIVIDAD" title={<>Mis <span>reservas.</span></>} description="Consulta tu historial y administra las reservas nuevas desde el código recibido por correo." />
+            <div className="payment-return-notice"><Info size={17} /><span>Las reservas del nuevo flujo se gestionan por código y aún no están asociadas al historial de la cuenta.</span><button className="flow-button flow-button-outline" onClick={() => navigate("manage")}>Ingresar código</button></div>
+            <div className="booking-summary"><div className="summary-icon"><CalendarDays size={20} /></div><div><strong>{data.bookings.length} reservas</strong><small>Tu historial deportivo</small></div><span className="summary-total">{money(data.bookings.reduce((sum, item) => sum + item.pricePaid, 0))}<small> total</small></span></div>
             {data.bookings.length ? <div className="booking-list">{data.bookings.map((booking) => <article className="booking-row" key={booking.id}>
               <div className={`booking-sport-icon sport-${sportSlug(booking.sport)}`}>{sportEmoji(booking.sport)}</div>
               <div className="booking-info"><div><strong>{booking.complexName}</strong><span className="booking-type">{booking.bookingType}</span></div><p><CalendarDays size={14} /> {booking.schedule}<span className="booking-dot">·</span>{booking.sport}</p></div>
               <div className="booking-price"><strong>{money(booking.pricePaid)}</strong><small>{new Date(booking.createdAt).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" })}</small></div>
               <BadgeCheck className="confirmed-icon" size={19} />
-            </article>)}</div> : <EmptyState title="Tu próxima aventura empieza aquí" description="Cuando reserves una cancha o te unas a un partido, verás los detalles en esta sección." action={<button className="button button-lime" onClick={() => navigate("courts")}>Explorar canchas <ArrowRight size={15} /></button>} />}
+            </article>)}</div> : <EmptyState title="Aún no tienes reservas" description="Cuando completes una reserva, su información aparecerá aquí." action={<button className="button button-lime" onClick={() => navigate("courts")}>Explorar recintos <ArrowRight size={15} /></button>} />}
           </section>}
-
-          {page === "wallet" && <section>
-            <PageIntro eyebrow="TU CUENTA" title={<>Perfil & <span>monedero.</span></>} description="Administra tu saldo y prepárate para jugar." />
-            <div className="wallet-layout">
-              <div className="wallet-left">
-                <article className="digital-card">
-                  <div className="card-card-top"><span>CANCHA<span>RESERVA</span></span><span className="card-chip">•••</span></div>
-                  <div className="card-balance-label">SALDO DISPONIBLE</div>
-                  <strong className="card-balance">{money(data.profile.walletBalance)}</strong>
-                  <div className="card-bottom"><span>{data.profile.name.toUpperCase()}</span><span>CR CARD&nbsp; •••• 4392</span></div>
-                  <div className="card-orbit orbit-one" /><div className="card-orbit orbit-two" />
-                </article>
-                <div className="profile-card"><Avatar name={data.profile.name} /><div><strong>{data.profile.name}</strong><small>{data.profile.email}</small></div><span className="verified-tag"><BadgeCheck size={14} /> Verificado</span></div>
-              </div>
-              <div className="recharge-card"><div className="recharge-heading"><span className="recharge-icon"><Wallet size={18} /></span><div><h3>Recarga tu monedero</h3><p>Saldo disponible al instante para jugar.</p></div></div>
-                <div className="recharge-options">{[5000, 10000, 20000].map((amount) => <button key={amount} className="recharge-option" disabled={busy} onClick={() => void runAction({ type: "funds", amount }, `${money(amount)} agregados a tu monedero.`)}><Plus size={15} /> {money(amount)}</button>)}</div>
-                <div className="wallet-note"><ShieldCheck size={17} /><span>Recarga simulada para esta experiencia. No se realizará ningún cobro real.</span></div>
-                <div className="wallet-activity"><strong>Tu actividad</strong><span>{data.bookings.length} reservas <ArrowRight size={14} onClick={() => navigate("bookings")} /></span></div>
-              </div>
-            </div>
-          </section>}
+          {page === "manage" && <ManageReservationAccess onBack={() => navigate("courts")} />}
+          {page === "admin" && <Suspense fallback={<p className="manage-reservation-status">Cargando panel de recintos…</p>}><VenueAdmin /></Suspense>}
         </div>
-        <footer className="footer"><span>© 2025 CANCHARESERVA</span><span>HECHO PARA LOS QUE VIVEN EL JUEGO <span className="footer-ball">●</span></span><span className={appService.usesSupabase ? "connection-live" : "connection-demo"}><i /> {appService.usesSupabase ? "SUPABASE CONECTADO" : "MODO DEMO"}</span></footer>
-        <nav className="mobile-nav">
-          <MobileNav active={page === "courts"} icon={<Search size={19} />} label="Explorar" onClick={() => navigate("courts")} />
-          <MobileNav active={page === "matches"} icon={<Zap size={19} />} label="Partidos" onClick={() => navigate("matches")} />
-          <MobileNav active={page === "bookings"} icon={<CalendarDays size={19} />} label="Reservas" onClick={() => navigate("bookings")} />
-          <MobileNav active={page === "wallet"} icon={<Wallet size={19} />} label="Monedero" onClick={() => navigate("wallet")} />
-        </nav>
+        <footer className="footer"><span>© 2026 PUNTORESERVAS</span><span>DESCUBRE TU PRÓXIMO JUEGO</span><span className={appService.usesSupabase ? "connection-live" : "connection-demo"}><i /> {appService.usesSupabase ? "SUPABASE CONECTADO" : "SIN DATOS REMOTOS"}</span></footer>
       </main>
-
-      {drawer && selectedComplex && <CreateMatchDrawer complex={data.complexes.find((item) => item.id === selectedComplex.id) ?? selectedComplex} busy={busy} onClose={() => setDrawer(false)} onSubmit={(schedule, description, slotsTotal) => {
-        void runAction({ type: "create", complexId: selectedComplex.id, schedule, description, slotsTotal }, "¡Partido exprés publicado! Ya puedes encontrar jugadores.", "matches");
-        setDrawer(false);
-      }} />}
-      {notice && <div className={`toast toast-${notice.kind}`} role="status"><span>{notice.kind === "success" ? <Check size={17} /> : <X size={17} />}</span>{notice.text}<button onClick={() => setNotice(null)} aria-label="Cerrar aviso"><X size={16} /></button></div>}
     </div>
   );
 }
 
-function NavButton({ active, icon, label, count, onClick }: { active: boolean; icon: ReactNode; label: string; count?: number; onClick: () => void }) {
-  return <button className={`nav-item ${active ? "nav-active" : ""}`} onClick={onClick}><span className="nav-icon">{icon}</span>{label}{count ? <span className="nav-count">{count}</span> : null}</button>;
+function NavButton({ active, icon, label, ariaLabel, onClick }: { active: boolean; icon: ReactNode; label: string; ariaLabel?: string; onClick: () => void }) {
+  return <button type="button" className={`nav-item ${active ? "nav-active" : ""}`} onClick={onClick} aria-label={ariaLabel ?? label} aria-current={active ? "page" : undefined}><span className="nav-icon">{icon}</span>{label}</button>;
 }
 
-function MobileNav({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
-  return <button className={`mobile-nav-item ${active ? "mobile-nav-active" : ""}`} onClick={onClick}>{icon}<span>{label}</span></button>;
+function ManageReservationAccess({ onBack }: { onBack: () => void }) {
+  const [code, setCode] = useState("");
+  const [status, setStatus] = useState("");
+  const [details, setDetails] = useState<ReservationLookup | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [activeAction, setActiveAction] = useState<"replace" | "add" | "cancel" | null>(null);
+  const [replacePlayers, setReplacePlayers] = useState<ReservationPlayerInput[]>([]);
+  const [newPlayers, setNewPlayers] = useState<ReservationPlayerInput[]>([{ full_name: "", email: "", rut: "" }]);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [paymentRequest, setPaymentRequest] = useState<ParticipantPaymentRequest | null>(null);
+
+  const lookup = async (value: string, announce = false) => {
+    setLoading(true);
+    setStatus("");
+    setPaymentRequest(null);
+    try {
+      const result = await appService.manageReservation({ code: value, action: "lookup" });
+      if (!("reservation" in result)) throw new Error("La reserva recibida no tiene un formato válido.");
+      const reservationDetails = result as ReservationLookup;
+      setDetails(reservationDetails);
+      setReplacePlayers(reservationDetails.players.filter((player) => player.status === "active").map((player) => ({
+        full_name: player.full_name,
+        email: player.email,
+        rut: "",
+      })));
+      if (announce) setStatus("Reserva encontrada. Ya puedes revisar sus datos y opciones.");
+    } catch (error) {
+      setDetails(null);
+      setStatus(error instanceof Error ? error.message : "No se pudo consultar la reserva.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const manage = async (
+    action: "replace_players" | "add_players" | "request_cancellation",
+    payload: { players?: ReservationPlayerInput[]; reason?: string },
+  ) => {
+    setLoading(true);
+    setStatus("");
+    setPaymentRequest(null);
+    try {
+      const result = await appService.manageReservation({ code, action, ...payload });
+      if ("checkout_url" in result) {
+        if (!isParticipantPaymentRequest(result) || !result.payment_links.length) {
+          throw new Error("No se recibieron los enlaces individuales de pago.");
+        }
+        if (!mercadoPagoUrl(result.checkout_url) || result.payment_links.some((link) => !mercadoPagoUrl(link.checkout_url))) {
+          throw new Error("Mercado Pago devolvió una dirección de pago no válida.");
+        }
+        setPaymentRequest(result);
+        setActiveAction(null);
+        return;
+      }
+      const emailPending = "email_pending" in result && result.email_pending === true;
+      setActiveAction(null);
+      await lookup(code);
+      setStatus(emailPending ? "La solicitud se registró, pero el aviso por correo está pendiente de reintento." : "La solicitud se completó correctamente.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "No se pudo completar la solicitud.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <section className="manage-reservation">
+      <PageIntro
+        eyebrow="ACCESO POR CÓDIGO"
+        title={<>Gestionar / Modificar <span>Reserva.</span></>}
+        description="Ingresa el código único enviado al correo de la reserva. No necesitas iniciar sesión."
+      />
+      <form className="manage-reservation-form" onSubmit={(event) => {
+        event.preventDefault();
+        void lookup(code, true);
+      }}>
+        <label className="flow-label" htmlFor="reservation-code">CÓDIGO DE RESERVA</label>
+        <input
+          id="reservation-code"
+          autoComplete="off"
+          autoCapitalize="characters"
+          maxLength={13}
+          pattern="RES-[A-Z0-9]{4}-[A-Z0-9]{4}"
+          placeholder="RES-AB12-CD34"
+          required
+          value={code}
+          onChange={(event) => {
+            setCode(event.target.value.toUpperCase());
+            setStatus("");
+          }}
+        />
+        <small>Formato: RES-XXXX-XXXX</small>
+        <button className="button button-lime" type="submit">Consultar reserva <ArrowRight size={15} /></button>
+        {status && <p className="manage-reservation-status" role="status">{status}</p>}
+      </form>
+      {loading && <p className="manage-reservation-status" role="status">Procesando de forma segura…</p>}
+      {paymentRequest && <div className="managed-action-form participant-checkout-result" aria-live="polite">
+        <h3>Enlaces de pago individuales</h3>
+        <p>La solicitud vence el {new Date(paymentRequest.expires_at).toLocaleString("es-CL", { timeZone: "America/Santiago" })}. Cada participante debe completar su propio aporte.</p>
+        {paymentRequest.email_pending && <p className="availability-error" role="status">No se pudo confirmar el envío de uno o más correos. Comparte directamente los enlaces a continuación.</p>}
+        <ul className="participant-payment-links">{paymentRequest.payment_links.map((link, index) => (
+          <li key={link.player_id}>
+            <span><strong>{link.full_name}</strong><small>{link.email} · {money(link.amount)}</small></span>
+            <a href={mercadoPagoUrl(link.checkout_url) ?? "#"} target="_blank" rel="noreferrer">Pagar participante {index + 1} <ArrowRight size={14} /></a>
+          </li>
+        ))}</ul>
+        <p>Total: <strong>{money(paymentRequest.amount)}</strong></p>
+      </div>}
+      {details && <>
+        <article className="managed-reservation-card">
+          <div className="managed-reservation-heading">
+            <div><div className="section-kicker">RESERVA {details.reservation.status.toUpperCase()}</div><h2>{details.complex.name}</h2><p>{details.court.name} · {details.court.sport}</p></div>
+            <strong>{money(details.reservation.total_amount)}</strong>
+          </div>
+          <div className="managed-reservation-meta">
+            <span><CalendarDays size={15} />{new Date(`${details.reservation.reservation_date}T12:00:00`).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric" })}</span>
+            <span><KeyRound size={15} />{details.reservation.start_time.slice(0, 5)}–{details.reservation.end_time.slice(0, 5)}</span>
+            <span><MapPin size={15} />{details.complex.location}</span>
+            <span><BadgeCheck size={15} />{details.reservation.player_count} participantes</span>
+          </div>
+          <h3>Participantes</h3>
+          <ul className="managed-player-list">{details.players.filter((player) => player.status === "active").map((player) => <li key={player.id}><span>{player.full_name}</span><small>{player.email}</small></li>)}</ul>
+          {details.policy && <div className="managed-policy"><strong>Política del recinto</strong><p>{details.policy.policy_summary}</p><small>{details.policy.refund_percentage}% de reembolso potencial · solicitud con {details.policy.min_hours_before_cancellation} h de anticipación. {details.policy.evaluation_procedure}</small></div>}
+          {details.cancellation_requests.map((request) => <div className="managed-cancellation" key={request.id}><strong>Cancelación: {request.status === "pending_review" ? "pendiente de revisión" : request.status}</strong><p>{request.reason}</p>{request.resolution_notes && <small>{request.resolution_notes}</small>}</div>)}
+          {details.reservation.status === "confirmed" && <div className="managed-actions">
+            <button type="button" className="flow-button flow-button-outline" onClick={() => setActiveAction(activeAction === "replace" ? null : "replace")}>Modificar participantes</button>
+            <button type="button" className="flow-button flow-button-outline" disabled={details.players.length >= details.court.max_players} onClick={() => setActiveAction(activeAction === "add" ? null : "add")}>Agregar cupos</button>
+            <button type="button" className="flow-button flow-button-outline" onClick={() => setActiveAction(activeAction === "cancel" ? null : "cancel")}>Solicitar cancelación</button>
+          </div>}
+          {activeAction === "replace" && <form className="managed-action-form" onSubmit={(event) => { event.preventDefault(); void manage("replace_players", { players: replacePlayers }); }}>
+            <h3>Actualizar participantes</h3>
+            <p>Por privacidad, vuelve a ingresar el RUT de cada participante. La cantidad de cupos pagados no cambia.</p>
+            {replacePlayers.map((player, index) => <ParticipantEditor key={index} index={index} player={player} onChange={(field, value) => setReplacePlayers((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item))} />)}
+            <button className="button button-lime" disabled={loading} type="submit">Guardar participantes</button>
+          </form>}
+          {activeAction === "add" && <form className="managed-action-form" onSubmit={(event) => { event.preventDefault(); void manage("add_players", { players: newPlayers }); }}>
+            <h3>Agregar participantes</h3>
+            {newPlayers.map((player, index) => <ParticipantEditor key={index} index={index} player={player} onChange={(field, value) => setNewPlayers((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item))} onRemove={newPlayers.length > 1 ? () => setNewPlayers((current) => current.filter((_, itemIndex) => itemIndex !== index)) : undefined} />)}
+            {newPlayers.length + details.players.length < details.court.max_players && <button className="flow-button flow-button-outline" type="button" onClick={() => setNewPlayers((current) => [...current, { full_name: "", email: "", rut: "" }])}>+ Agregar otro</button>}
+            <button className="button button-lime" disabled={loading} type="submit">Continuar</button>
+          </form>}
+          {activeAction === "cancel" && <form className="managed-action-form" onSubmit={(event) => { event.preventDefault(); void manage("request_cancellation", { reason: cancellationReason }); }}>
+            <h3>Solicitar cancelación</h3>
+            <p>La solicitud será revisada por el recinto. El reembolso no es automático y se rige por la política publicada.</p>
+            <label>Motivo<textarea required minLength={3} maxLength={1000} value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value)} /></label>
+            <button className="button button-lime" disabled={loading} type="submit">Enviar solicitud</button>
+          </form>}
+        </article>
+        {details.modifications.length > 0 && <div className="managed-history"><strong>Actividad reciente</strong>{details.modifications.map((item) => <p key={item.id}>{item.action_type.replaceAll("_", " ")} · {new Date(item.created_at).toLocaleString("es-CL")}</p>)}</div>}
+      </>}
+      <button className="button button-ghost manage-reservation-back" type="button" onClick={onBack}>Volver a explorar</button>
+    </section>
+  );
 }
 
-function Avatar({ name }: { name: string }) {
-  return <span className="avatar">{name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span>;
+function ParticipantEditor({
+  index,
+  player,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  player: ReservationPlayerInput;
+  onChange: (field: keyof ReservationPlayerInput, value: string) => void;
+  onRemove?: () => void;
+}) {
+  return <fieldset className="participant-fields">
+    <legend>Participante {index + 1}</legend>
+    <label>Nombre y apellido<input required maxLength={120} value={player.full_name} onChange={(event) => onChange("full_name", event.target.value)} /></label>
+    <label>Correo electrónico<input required type="email" maxLength={254} value={player.email} onChange={(event) => onChange("email", event.target.value)} /></label>
+    <label>RUT<input required maxLength={12} placeholder="12.345.678-9" value={player.rut} onChange={(event) => onChange("rut", event.target.value)} /></label>
+    {onRemove && <button className="remove-player-button" type="button" onClick={onRemove}>Quitar participante</button>}
+  </fieldset>;
 }
 
-function ComplexCard({ complex, index, onClick }: { complex: Complex; index: number; onClick: () => void }) {
-  return <article className="complex-card" onClick={onClick} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") onClick(); }}>
-    <div className="complex-photo" style={{ backgroundImage: `url("${complex.image}")`, backgroundPosition: complex.imagePosition ?? "center" }}>
-      <div className="photo-shade" />
-      <span className={`sport-pill sport-${sportSlug(complex.sport)}`}>{sportEmoji(complex.sport)} {complex.sport}</span>
-      <span className="rating-pill"><Star size={13} fill="currentColor" /> {complex.rating.toFixed(1)}</span>
-      <span className="photo-index">0{index + 1} <i /> 04</span>
-      <button className="card-open" aria-label={`Ver ${complex.name}`}><ArrowUpRight size={18} /></button>
-    </div>
-    <div className="complex-card-body">
-      <div className="complex-location"><MapPin size={13} /> {complex.location}</div>
-      <h3>{complex.name}</h3>
-      <div className="complex-card-bottom"><div><strong>{money(complex.pricePerHour)}</strong><span> / hora</span></div><span className="available-times"><i /> {complex.availableTimes.length} horarios</span></div>
-    </div>
-  </article>;
-}
-
-function MatchCard({ match, index, onClick }: { match: Match; index: number; onClick: () => void }) {
-  const spots = match.slotsTotal - match.slotsTaken;
-  return <article className="match-card" onClick={onClick} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") onClick(); }}>
-    <div className={`match-card-top sport-bg-${sportSlug(match.sport)}`}><span className="match-sport-label">{sportEmoji(match.sport)} {match.sport.toUpperCase()}</span><span className="match-time"><Clock3 size={13} /> {match.schedule}</span><span className="match-card-number">0{index + 1}</span><div className="match-top-word">{match.sport === "Fútbol" ? "FOOTBALL" : match.sport.toUpperCase()}</div></div>
-    <div className="match-card-content"><div className="match-venue"><MapPin size={13} /> {match.complexName} <span>·</span> {match.location}</div><h3>{match.description}</h3>
-      <div className="match-host"><Avatar name={match.hostName} /><span>Organiza <strong>{match.hostName}</strong></span><span className="host-online"><i /> Organizador</span></div>
-      <div className="slot-bar">{Array.from({ length: match.slotsTotal }, (_, index) => <span className={index < match.slotsTaken ? "slot-filled" : ""} key={index} />)}</div>
-      <div className="match-card-footer"><span className={spots <= 2 ? "spots-warning" : "spots-open"}>{spots > 0 ? `${spots} ${spots === 1 ? "lugar" : "lugares"} disponibles` : "Completo"}</span><span className="share-cost"><strong>{money(match.pricePerPlayer)}</strong><small> / jugador</small><ArrowRight size={15} /></span></div>
-    </div>
-  </article>;
-}
-
-function ComplexDetail({ complex, busy, onBack, onCreate, onBook }: { complex: Complex; busy: boolean; onBack: () => void; onCreate: () => void; onBook: (schedule: string) => void }) {
-  const [schedule, setSchedule] = useState(complex.availableTimes[0] ?? "");
-  const canBook = Boolean(schedule && complex.availableTimes.includes(schedule));
-  return <section className="detail-page"><button className="back-button" onClick={onBack}><ArrowLeft size={16} /> Volver a canchas</button>
-    <div className="detail-hero" style={{ backgroundImage: `url("${complex.image}")` }}><div className="detail-hero-shade" /><span className={`sport-pill sport-${sportSlug(complex.sport)}`}>{sportEmoji(complex.sport)} {complex.sport}</span><span className="detail-rating"><Star size={15} fill="currentColor" /> {complex.rating} <small>· 120 reseñas</small></span></div>
-    <div className="detail-columns"><div className="detail-main"><div className="section-kicker">TU PRÓXIMO DESTINO</div><h1>{complex.name}<span>.</span></h1><p className="detail-address"><MapPin size={16} /> {complex.location}</p>
-      <div className="detail-blurb"><h3>Un espacio para disfrutar el juego.</h3><p>Encuentra tu cancha ideal, reúne a tu equipo y vive el deporte como más te gusta. Reserva tu horario o invita a otros jugadores a compartir el partido.</p></div>
-      <div className="detail-inline-stats"><span><Star size={16} /> <strong>{complex.rating}</strong> valoración</span><span><ShieldCheck size={16} /> Reserva segura</span><span><Clock3 size={16} /> 60 min</span></div>
-    </div><aside className="booking-panel"><div className="panel-price"><strong>{money(complex.pricePerHour)}</strong><span> / hora</span></div><p>Selecciona tu horario</p>
-      <div className="time-slots">{complex.availableTimes.map((time) => <button key={time} className={schedule === time ? "time-slot time-slot-active" : "time-slot"} onClick={() => setSchedule(time)}>{time}</button>)}</div>
-      {!complex.availableTimes.length && <p className="no-times">No hay horarios disponibles por ahora.</p>}
-      <button className="button button-lime full-button" disabled={busy || !canBook} onClick={() => onBook(schedule)}>Reservar cancha <ArrowRight size={16} /></button>
-      <div className="panel-or">O ARMA TU EQUIPO</div><button className="button button-outline full-button" onClick={onCreate}><Zap size={15} /> Crear partido exprés</button>
-      <small className="secure-note"><ShieldCheck size={13} /> Pago seguro · Cancelación flexible</small>
-    </aside></div>
-  </section>;
-}
-
-function MatchDetail({ match, profileName, busy, onBack, onJoin }: { match: Match; profileName: string; busy: boolean; onBack: () => void; onJoin: () => void }) {
-  const spots = match.slotsTotal - match.slotsTaken;
-  const alreadyJoined = match.players.includes(profileName);
-  return <section className="detail-page match-detail-page"><button className="back-button" onClick={onBack}><ArrowLeft size={16} /> Volver a partidos</button>
-    <div className={`match-detail-banner sport-bg-${sportSlug(match.sport)}`}><span className="match-sport-label">{sportEmoji(match.sport)} {match.sport.toUpperCase()}</span><div><span className="section-kicker">BUSCA JUGADORES</span><h1>El próximo punto<br />lo juegas tú<span>.</span></h1></div><span className="match-time"><Clock3 size={14} /> {match.schedule}</span></div>
-    <div className="detail-columns match-detail-columns"><div className="detail-main"><div className="section-kicker">EL PARTIDO</div><h2>{match.complexName}</h2><p className="detail-address"><MapPin size={16} /> {match.location}</p><div className="detail-blurb"><h3>{match.description}</h3><p>Organizado por {match.hostName}. ¡Súmate, conoce gente nueva y comparte la cancha!</p></div>
-      <h3 className="players-heading">Jugadores <span>{match.slotsTaken}/{match.slotsTotal}</span></h3><div className="players-list">{match.players.map((player, index) => <div className="player-chip" key={`${player}-${index}`}><Avatar name={player} /><span>{player}</span>{index === 0 && <small>ANFITRIÓN</small>}</div>)}</div>
-    </div><aside className="booking-panel"><span className="live-status"><span className="pulse-dot" /> {spots > 0 ? `${spots} ${spots === 1 ? "cupo disponible" : "cupos disponibles"}` : "Partido completo"}</span><div className="panel-price match-panel-price"><strong>{money(match.pricePerPlayer)}</strong><span> / jugador</span></div><p>Tu parte, sin vueltas.</p><div className="cost-breakdown"><span>Cuota del partido</span><strong>{money(match.pricePerPlayer)}</strong><span>Protección de reserva</span><strong className="free-text">Incluida</strong></div><button className="button button-lime full-button" disabled={busy || spots <= 0 || alreadyJoined} onClick={onJoin}>{alreadyJoined ? "Ya tienes un cupo" : "Unirme al partido"} <ArrowRight size={16} /></button><small className="secure-note"><ShieldCheck size={13} /> Solo pagas tu parte del partido</small></aside></div>
-  </section>;
-}
-
-function CreateMatchDrawer({ complex, busy, onClose, onSubmit }: { complex: Complex; busy: boolean; onClose: () => void; onSubmit: (schedule: string, description: string, slotsTotal: number) => void }) {
-  const [schedule, setSchedule] = useState(complex.availableTimes[0] ?? "");
-  const [description, setDescription] = useState("");
-  const [slots, setSlots] = useState(complex.sport === "Fútbol" ? 10 : 4);
-  const maxSlots = complex.sport === "Fútbol" ? 14 : 4;
-  return <div className="drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="create-drawer">
-    <div className="drawer-top"><div><div className="section-kicker">INVITA A TU EQUIPO</div><h2>Arma tu partido<span>.</span></h2></div><button className="icon-button" onClick={onClose} aria-label="Cerrar"><X size={19} /></button></div>
-    <p className="drawer-intro">Publica los cupos y comparte el costo de la cancha con otros jugadores.</p>
-    <div className="drawer-complex"><div className={`booking-sport-icon sport-${sportSlug(complex.sport)}`}>{sportEmoji(complex.sport)}</div><span><strong>{complex.name}</strong><small>{complex.sport} · {money(complex.pricePerHour)} / hora</small></span></div>
-    <label className="form-label">HORARIO DISPONIBLE</label><div className="time-slots">{complex.availableTimes.map((time) => <button key={time} className={schedule === time ? "time-slot time-slot-active" : "time-slot"} onClick={() => setSchedule(time)}>{time}</button>)}</div>
-    <label className="form-label slots-label">JUGADORES TOTALES <strong>{slots}</strong></label><input className="slots-slider" type="range" min={4} max={maxSlots} value={slots} onChange={(event) => setSlots(Number(event.target.value))} /><div className="slider-labels"><span>4 jugadores</span><span>{maxSlots} jugadores</span></div>
-    <label className="form-label description-label" htmlFor="match-description">DESCRIPCIÓN <span>OPCIONAL</span></label><textarea id="match-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Cuéntales qué tipo de partido buscas, nivel, posiciones…"></textarea>
-    <div className="cost-estimate"><span>Tu cuota como anfitrión</span><strong>{money(Math.round((complex.pricePerHour / slots) * 100) / 100)}</strong></div>
-    <button className="button button-lime full-button drawer-submit" disabled={busy || !schedule} onClick={() => onSubmit(schedule, description, slots)}><Zap size={16} /> Publicar partido</button>
-    <small className="secure-note"><ShieldCheck size={13} /> Solo pagas tu parte; no se cobra la cancha completa.</small>
-  </aside></div>;
-}
-
-function PageIntro({ eyebrow, title, description, action }: { eyebrow: string; title: ReactNode; description: string; action?: ReactNode }) {
-  return <div className="page-intro"><div><div className="section-kicker">{eyebrow}</div><h1>{title}</h1><p>{description}</p></div>{action}</div>;
+function PageIntro({ eyebrow, title, description }: { eyebrow: string; title: ReactNode; description: string }) {
+  return <div className="page-intro"><div><div className="section-kicker">{eyebrow}</div><h1>{title}</h1><p>{description}</p></div></div>;
 }
 
 function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
-  return <div className="empty-state"><span><Sparkles size={24} /></span><h3>{title}</h3><p>{description}</p>{action}</div>;
+  return <div className="empty-state"><span><BadgeCheck size={24} /></span><h3>{title}</h3><p>{description}</p>{action}</div>;
 }
 
-function pageTitle(page: Page) {
-  return ({ courts: "Explorar canchas", matches: "Partidos exprés", bookings: "Mis reservas", wallet: "Mi monedero" })[page];
+function sportEmoji(sport: string) {
+  return ({ "Fútbol": "⚽", "Pádel": "🎾", "Tenis": "🎾" } as Record<string, string>)[sport] ?? "●";
 }
 
-function sportEmoji(sport: Sport) {
-  return ({ "Fútbol": "⚽", "Pádel": "🎾", "Tenis": "🎾" })[sport];
-}
-
-function sportSlug(sport: Sport) {
-  return sport === "Fútbol" ? "futbol" : sport.toLowerCase();
+function sportSlug(sport: string) {
+  if (sport === "Fútbol") return "futbol";
+  if (sport === "Pádel") return "padel";
+  return "tenis";
 }
 
 export default App;

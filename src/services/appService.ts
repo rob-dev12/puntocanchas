@@ -1,7 +1,20 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { seedData, type Action, type AppData, type Booking, type Complex, type Match, type Profile, type Sport } from "../types";
+import {
+  seedData,
+  type Action,
+  type AppData,
+  type AvailabilitySlot,
+  type Booking,
+  type Complex,
+  type Court,
+  type ParticipantPaymentRequest,
+  type Profile,
+  type ReservationLookup,
+  type ReservationPlayerInput,
+  type Sport,
+} from "../types";
 
-const storageKey = "cancha-reserva-demo-v1";
+const storageKey = "cancha-reserva-demo-v2";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 const isConfigured = Boolean(supabaseUrl && supabaseAnonKey);
@@ -54,23 +67,6 @@ function mapComplex(row: Record<string, unknown>): Complex {
   };
 }
 
-function mapMatch(row: Record<string, unknown>): Match {
-  return {
-    id: String(row.id),
-    complexId: String(row.complex_id),
-    complexName: String(row.complex_name),
-    sport: asSport(String(row.sport_type)),
-    location: String(row.location),
-    schedule: String(row.schedule),
-    hostName: String(row.host_name),
-    description: String(row.description),
-    slotsTotal: Number(row.slots_total),
-    slotsTaken: Number(row.slots_taken),
-    pricePerPlayer: Number(row.price_per_player),
-    players: row.players as string[],
-  };
-}
-
 function mapBooking(row: Record<string, unknown>): Booking {
   return {
     id: String(row.id),
@@ -93,25 +89,37 @@ async function loadRemoteData(): Promise<AppData> {
   }
 
   const { data: profileData, error: profileError } = await supabase.functions.invoke("sport-actions", {
-    body: { action: "bootstrap", name: "Carlos Mármol" },
+    body: { action: "bootstrap", name: "Jugador" },
   });
   if (profileError) throw profileError;
 
-  const [complexesResult, matchesResult, bookingsResult] = await Promise.all([
+  const [complexesResult, bookingsResult] = await Promise.all([
     supabase.from("sport_complexes").select("*").order("rating", { ascending: false }),
-    supabase.from("match_sessions").select("*").order("created_at", { ascending: false }),
     supabase.from("bookings").select("*").order("created_at", { ascending: false }),
   ]);
   if (complexesResult.error) throw complexesResult.error;
-  if (matchesResult.error) throw matchesResult.error;
   if (bookingsResult.error) throw bookingsResult.error;
 
   return {
     profile: profileData.profile as Profile,
     complexes: complexesResult.data.map(mapComplex),
-    matches: matchesResult.data.map(mapMatch),
     bookings: bookingsResult.data.map(mapBooking),
   };
+}
+
+async function invokeFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await getClient().functions.invoke(name, { body });
+  if (error) {
+    if ("context" in error && error.context instanceof Response) {
+      const payload: unknown = await error.context.clone().json().catch(() => null);
+      if (typeof payload === "object" && payload !== null && "error" in payload && typeof payload.error === "string") {
+        throw new Error(payload.error);
+      }
+    }
+    throw error;
+  }
+  if (typeof data !== "object" || data === null) throw new Error(`La función ${name} devolvió una respuesta inválida.`);
+  return data as T;
 }
 
 export const appService = {
@@ -145,77 +153,102 @@ export const appService = {
 
     const data = currentData ?? readDemoData();
     const updated = structuredClone(data);
-    if (action.type === "funds") {
-      if (action.amount <= 0 || action.amount > 1000000) throw new Error("El monto de recarga no es válido.");
-      updated.profile.walletBalance += action.amount;
-    } else if (action.type === "book") {
-      const complex = updated.complexes.find((item) => item.id === action.complexId);
-      if (!complex || !complex.availableTimes.includes(action.schedule)) throw new Error("Ese horario ya no está disponible.");
-      if (updated.profile.walletBalance < complex.pricePerHour) throw new Error("Saldo insuficiente para reservar la cancha.");
-      complex.availableTimes = complex.availableTimes.filter((time) => time !== action.schedule);
-      updated.profile.walletBalance -= complex.pricePerHour;
-      updated.bookings.unshift({
-        id: crypto.randomUUID(),
-        complexName: complex.name,
-        sport: complex.sport,
-        schedule: `Cancha completa · ${action.schedule}`,
-        bookingType: "Cancha completa",
-        pricePaid: complex.pricePerHour,
-        createdAt: new Date().toISOString(),
-      });
-    } else if (action.type === "create") {
-      const complex = updated.complexes.find((item) => item.id === action.complexId);
-      if (!complex || !complex.availableTimes.includes(action.schedule)) throw new Error("Ese horario ya no está disponible.");
-      const minimumSlots = 4;
-      const maximumSlots = complex.sport === "Fútbol" ? 14 : 4;
-      if (action.slotsTotal < minimumSlots || action.slotsTotal > maximumSlots) throw new Error("La cantidad de jugadores no es válida.");
-      const share = Math.round((complex.pricePerHour / action.slotsTotal) * 100) / 100;
-      if (updated.profile.walletBalance < share) throw new Error("Saldo insuficiente para pagar tu cuota.");
-      complex.availableTimes = complex.availableTimes.filter((time) => time !== action.schedule);
-      updated.profile.walletBalance -= share;
-      updated.matches.unshift({
-        id: crypto.randomUUID(),
-        complexId: complex.id,
-        complexName: complex.name,
-        sport: complex.sport,
-        location: complex.location,
-        schedule: `Hoy · ${action.schedule}`,
-        hostName: updated.profile.name,
-        description: action.description.trim() || `Partido exprés de ${complex.sport} en ${complex.name}.`,
-        slotsTotal: action.slotsTotal,
-        slotsTaken: 1,
-        pricePerPlayer: share,
-        players: [updated.profile.name],
-      });
-      updated.bookings.unshift({
-        id: crypto.randomUUID(),
-        complexName: complex.name,
-        sport: complex.sport,
-        schedule: `Organizado · ${action.schedule}`,
-        bookingType: "Partido exprés · Creador",
-        pricePaid: share,
-        createdAt: new Date().toISOString(),
-      });
-    } else {
-      const match = updated.matches.find((item) => item.id === action.matchId);
-      if (!match || match.slotsTaken >= match.slotsTotal) throw new Error("El partido ya está completo.");
-      if (match.players.includes(updated.profile.name)) throw new Error("Ya tienes un cupo en este partido.");
-      if (updated.profile.walletBalance < match.pricePerPlayer) throw new Error("Saldo insuficiente para unirte al partido.");
-      updated.profile.walletBalance -= match.pricePerPlayer;
-      match.slotsTaken += 1;
-      match.players.push(updated.profile.name);
-      updated.bookings.unshift({
-        id: crypto.randomUUID(),
-        complexName: match.complexName,
-        sport: match.sport,
-        schedule: `Partido exprés · ${match.schedule}`,
-        bookingType: "Partido exprés · Jugador",
-        pricePaid: match.pricePerPlayer,
-        createdAt: new Date().toISOString(),
-      });
-    }
+    const complex = updated.complexes.find((item) => item.id === action.complexId);
+    if (!complex || !complex.availableTimes.includes(action.schedule)) throw new Error("Ese horario ya no está disponible.");
+    complex.availableTimes = complex.availableTimes.filter((time) => time !== action.schedule);
+    updated.bookings.unshift({
+      id: crypto.randomUUID(),
+      complexName: complex.name,
+      sport: complex.sport,
+      schedule: `Cancha completa · ${action.schedule}`,
+      bookingType: "Cancha completa",
+      pricePaid: complex.pricePerHour,
+      createdAt: new Date().toISOString(),
+    });
     saveDemoData(updated);
     currentData = updated;
     return updated;
+  },
+
+  async listCourts(complexIds: string[]): Promise<Court[]> {
+    if (!complexIds.length) return [];
+    const { data, error } = await getClient()
+      .from("courts")
+      .select("id, complex_id, name, sport, min_players, max_players, price_per_slot, price_per_player, slot_duration_minutes, open_time, close_time")
+      .in("complex_id", complexIds)
+      .eq("is_active", true)
+      .order("name");
+    if (error) throw error;
+    return data.map((row) => ({
+      id: row.id,
+      complexId: row.complex_id,
+      name: row.name,
+      sport: row.sport,
+      minPlayers: row.min_players,
+      maxPlayers: row.max_players,
+      pricePerSlot: row.price_per_slot,
+      pricePerPlayer: row.price_per_player,
+      slotDurationMinutes: row.slot_duration_minutes,
+      openTime: row.open_time,
+      closeTime: row.close_time,
+    }));
+  },
+
+  async getAvailability(complexId: string, courtId: string, reservationDate: string): Promise<AvailabilitySlot[]> {
+    const response = await invokeFunction<{ slots: AvailabilitySlot[] }>("get-availability", {
+      complex_id: complexId,
+      court_id: courtId,
+      reservation_date: reservationDate,
+    });
+    if (!Array.isArray(response.slots)) throw new Error("La disponibilidad recibida no tiene un formato válido.");
+    return response.slots;
+  },
+
+  async createReservationCheckout(input: {
+    complexId: string;
+    courtId: string;
+    reservationDate: string;
+    startTime: string;
+    players: ReservationPlayerInput[];
+  }): Promise<ParticipantPaymentRequest & { reservation_id: string }> {
+    return invokeFunction("create-reservation-checkout", {
+      complex_id: input.complexId,
+      court_id: input.courtId,
+      reservation_date: input.reservationDate,
+      start_time: input.startTime,
+      players: input.players,
+    });
+  },
+
+  async manageReservation(input: {
+    code: string;
+    action: "lookup" | "replace_players" | "add_players" | "request_cancellation";
+    players?: ReservationPlayerInput[];
+    reason?: string;
+  }): Promise<ReservationLookup | ParticipantPaymentRequest | Record<string, unknown>> {
+    return invokeFunction("manage-reservation", input);
+  },
+
+  async signInVenueManager(email: string, password: string): Promise<void> {
+    const { error } = await getClient().auth.signInWithPassword({ email: email.trim(), password });
+    if (error) throw error;
+  },
+
+  async signOutVenueManager(): Promise<void> {
+    const { error } = await getClient().auth.signOut();
+    if (error) throw error;
+    const { error: anonymousError } = await getClient().auth.signInAnonymously();
+    if (anonymousError) throw anonymousError;
+  },
+
+  async getCurrentUser(): Promise<{ id: string; isAnonymous: boolean } | null> {
+    const { data, error } = await getClient().auth.getUser();
+    if (error) throw error;
+    if (!data.user) return null;
+    return { id: data.user.id, isAnonymous: data.user.is_anonymous === true };
+  },
+
+  async manageVenue(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return invokeFunction("manage-venue", input);
   },
 };
