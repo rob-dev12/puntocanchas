@@ -31,16 +31,35 @@ export const chileRegions: ChileRegion[] = [
   { id: "12", name: "Magallanes y de la Antártica Chilena", roman: "XII" },
 ];
 
-const knownComunas: Array<ChileComuna & { aliases: string[] }> = [
-  { id: "13114", name: "Las Condes", regionId: "13", aliases: ["las condes"] },
-  { id: "13132", name: "Vitacura", regionId: "13", aliases: ["vitacura"] },
-  { id: "13123", name: "Providencia", regionId: "13", aliases: ["providencia"] },
-  { id: "13301", name: "Colina", regionId: "13", aliases: ["colina"] },
+export const demoChileCommunes: ChileComuna[] = [
+  { id: "15101", name: "Arica", regionId: "15" },
+  { id: "01101", name: "Iquique", regionId: "01" },
+  { id: "02101", name: "Antofagasta", regionId: "02" },
+  { id: "03101", name: "Copiapó", regionId: "03" },
+  { id: "04101", name: "La Serena", regionId: "04" },
+  { id: "05101", name: "Valparaíso", regionId: "05" },
+  { id: "13114", name: "Las Condes", regionId: "13" },
+  { id: "06101", name: "Rancagua", regionId: "06" },
+  { id: "07101", name: "Talca", regionId: "07" },
+  { id: "16101", name: "Chillán", regionId: "16" },
+  { id: "08101", name: "Concepción", regionId: "08" },
+  { id: "09101", name: "Temuco", regionId: "09" },
+  { id: "14101", name: "Valdivia", regionId: "14" },
+  { id: "10101", name: "Puerto Montt", regionId: "10" },
+  { id: "11101", name: "Coyhaique", regionId: "11" },
+  { id: "12101", name: "Punta Arenas", regionId: "12" },
 ];
 
 function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 }
+
+const knownComunas: Array<ChileComuna & { aliases: string[] }> = [
+  ...demoChileCommunes.map((comuna) => ({ ...comuna, aliases: [normalize(comuna.name)] })),
+  { id: "13132", name: "Vitacura", regionId: "13", aliases: ["vitacura"] },
+  { id: "13123", name: "Providencia", regionId: "13", aliases: ["providencia"] },
+  { id: "13301", name: "Colina", regionId: "13", aliases: ["colina"] },
+];
 
 export function comunaForComplex(complex: Complex): ChileComuna | null {
   const location = normalize(complex.location);

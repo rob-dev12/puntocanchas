@@ -511,11 +511,11 @@ button:disabled { cursor: not-allowed !important; opacity: .58; }
 
 .reservation-flow { max-width: 1180px; margin: 0 auto; animation: arrive .28s ease both; }
 .flow-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 20px 0 24px; }
-.flow-heading h1 { margin: 11px 0 10px; color: #172554; font: 600 clamp(34px, 4vw, 52px)/1.02 "Space Grotesk", sans-serif; letter-spacing: -2.4px; }
-.flow-heading h1 span { color: var(--lime); }
+.flow-heading h1 { min-height: 2.04em; max-width: 790px; margin: 11px 0 10px; color: #172554; font: 600 clamp(34px, 4vw, 52px)/1.02 "Space Grotesk", sans-serif; letter-spacing: -2.4px; }
+.typewriter-cursor { display: inline-block; width: 3px; height: .88em; margin-left: 5px; background: var(--lime); vertical-align: -.04em; animation: typewriter-blink .8s steps(2, start) infinite; }
+@keyframes typewriter-blink { to { visibility: hidden; } }
 .flow-heading p { max-width: 470px; margin: 0; color: #64748b; font-size: 12px; line-height: 1.7; }
-.flow-location-summary { display: inline-flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; color: #334155; background: #ffffff; font-size: 11px; font-weight: 600; white-space: nowrap; }
-.flow-location-summary svg { color: var(--lime); }
+.demo-mode-notice { margin: -5px 0 16px; padding: 10px 12px; border: 1px solid #e8c98c; border-radius: 7px; color: #68471a; background: #fff8e8; font-size: 9px; line-height: 1.5; }
 .flow-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 30px; border: 1px solid var(--line); border-radius: 9px; background: #ffffff; }
 .flow-step { position: relative; display: flex; min-width: 0; align-items: center; gap: 9px; padding: 12px 14px; border: 0; color: #94a3b8; background: transparent; text-align: left; }
 .flow-step + .flow-step { border-left: 1px solid var(--line); }
@@ -563,23 +563,26 @@ button:disabled { cursor: not-allowed !important; opacity: .58; }
 .flow-back { display: inline-flex; align-items: center; gap: 6px; margin: -4px 0 17px; padding: 6px 0; border: 0; color: #64748b; background: transparent; font-size: 9px; font-weight: 600; cursor: pointer; }
 .flow-back:hover { color: var(--lime); }
 .sport-choice-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.sport-choice-card { position: relative; display: grid; min-height: 235px; justify-items: start; align-content: end; overflow: hidden; padding: 22px; border: 1px solid rgba(255,255,255,.13); border-radius: 14px; color: #ffffff; background: #12392e; text-align: left; cursor: pointer; isolation: isolate; animation: arrive .3s ease both; transition: transform .24s ease, border-color .24s ease, box-shadow .24s ease; }
+.sport-choice-card { position: relative; display: grid; min-height: 235px; justify-items: start; align-content: end; overflow: hidden; padding: 22px; border: 1px solid rgba(255,255,255,.35); border-radius: 5px; color: #fff8e9; background: #12392e; text-align: left; cursor: pointer; isolation: isolate; animation: arrive .3s ease both; transition: transform .24s ease, border-color .24s ease, box-shadow .24s ease; }
+.sport-choice-card::before { position: absolute; z-index: 1; inset: 7px; border: 1px solid rgba(255,248,233,.3); content: ""; pointer-events: none; }
+.sport-choice-card::after { position: absolute; z-index: -1; inset: 0; background-image: radial-gradient(rgba(255,244,218,.35) .65px, transparent .8px), linear-gradient(115deg, transparent 38%, rgba(245,185,101,.12) 100%); background-size: 5px 5px, auto; content: ""; opacity: .18; mix-blend-mode: screen; pointer-events: none; }
 .sport-choice-card:hover { border-color: rgba(255,255,255,.5); box-shadow: 0 20px 38px rgba(15,23,42,.2); transform: translateY(-5px); }
 .sport-choice-card-futbol { background: radial-gradient(ellipse at 82% 28%, rgba(84,237,161,.3), transparent 40%), linear-gradient(145deg, #16583b, #0d3429 75%); }
 .sport-choice-card-padel { background: radial-gradient(ellipse at 82% 28%, rgba(57,208,211,.32), transparent 40%), linear-gradient(145deg, #124d59, #102d42 75%); }
 .sport-choice-card-tenis { background: radial-gradient(ellipse at 82% 28%, rgba(221,220,89,.3), transparent 40%), linear-gradient(145deg, #485522, #202f24 75%); }
 .sport-card-art { position: absolute; z-index: -1; top: 0; right: 0; width: 55%; height: 100%; overflow: hidden; perspective: 700px; pointer-events: none; }
 .sport-card-art-futbol .sport-art-racket { display: none; }
+.sport-art-edition { position: absolute; top: 16px; left: 0; color: rgba(255,248,233,.68); font: 700 7px "Space Grotesk", sans-serif; letter-spacing: 1.7px; transform: rotate(-90deg) translateX(-100%); transform-origin: top left; white-space: nowrap; }
 .sport-art-court { position: absolute; top: 16%; right: -42%; width: 152%; height: 125%; border: 1px solid rgba(255,255,255,.32); border-radius: 48%; background: repeating-linear-gradient(90deg, transparent 0 31%, rgba(255,255,255,.13) 31.4% 31.8%, transparent 32.2% 63%), linear-gradient(135deg, rgba(255,255,255,.1), transparent 65%); box-shadow: 0 0 50px rgba(255,255,255,.12), inset 0 0 30px rgba(255,255,255,.12); transform: rotateX(64deg) rotateZ(-28deg); }
 .sport-art-racket { position: absolute; top: 23%; right: 29%; width: 48px; height: 66px; border: 7px solid rgba(226,255,235,.88); border-radius: 48%; filter: drop-shadow(0 11px 8px rgba(0,0,0,.35)); transform: rotate(32deg); animation: sport-racket-float 4s ease-in-out infinite; }
 .sport-art-racket::before { position: absolute; inset: 3px; border: 1px solid rgba(255,255,255,.55); border-radius: 50%; content: ""; }
 .sport-art-racket::after { position: absolute; bottom: -31px; left: 13px; width: 8px; height: 34px; border-radius: 5px; background: linear-gradient(90deg, rgba(255,255,255,.8), rgba(255,255,255,.32)); content: ""; }
 .sport-art-ball { position: absolute; top: 42%; right: 7%; display: block; font-size: 55px; filter: drop-shadow(0 15px 9px rgba(0,0,0,.32)); transform: rotate(-13deg); animation: sport-ball-float 3.2s ease-in-out infinite; }
 .sport-art-spark { position: absolute; top: 18%; right: 16%; color: rgba(255,255,255,.82); font-size: 20px; text-shadow: 0 0 16px rgba(255,255,255,.65); animation: sport-spark 3s ease-in-out infinite; }
-.sport-choice-icon { position: relative; z-index: 1; display: grid; width: 39px; height: 39px; place-items: center; margin-bottom: 18px; border: 1px solid rgba(255,255,255,.28); border-radius: 12px; color: #ffffff; background: rgba(255,255,255,.13); box-shadow: 0 8px 20px rgba(0,0,0,.15); backdrop-filter: blur(8px); transition: transform .2s ease; }
+.sport-choice-icon { position: relative; z-index: 1; display: grid; width: 39px; height: 39px; place-items: center; margin-bottom: 18px; border: 1px solid rgba(255,248,233,.48); border-radius: 50%; color: #fff8e9; background: rgba(12,32,25,.32); box-shadow: 0 8px 20px rgba(0,0,0,.15); backdrop-filter: blur(8px); transition: transform .2s ease; }
 .sport-choice-card:hover .sport-choice-icon { transform: rotate(-8deg) scale(1.08); }
 .sport-choice-name, .sport-choice-hint { position: relative; z-index: 1; max-width: 45%; }
-.sport-choice-name { font: 600 21px "Space Grotesk", sans-serif; text-shadow: 0 2px 12px rgba(0,0,0,.2); }
+.sport-choice-name { font: 600 22px "Space Grotesk", sans-serif; letter-spacing: .3px; text-shadow: 0 2px 12px rgba(0,0,0,.2); text-transform: uppercase; }
 .sport-choice-hint { margin-top: 6px; color: rgba(255,255,255,.7); font-size: 9px; }
 .sport-choice-arrow { position: absolute; z-index: 1; right: 17px; bottom: 17px; color: #ffffff; transition: transform .2s ease; }
 .sport-choice-card:hover .sport-choice-arrow { transform: translateX(4px); }
@@ -587,7 +590,7 @@ button:disabled { cursor: not-allowed !important; opacity: .58; }
 @keyframes sport-racket-float { 0%, 100% { transform: translateY(0) rotate(32deg); } 50% { transform: translateY(7px) rotate(38deg); } }
 @keyframes sport-spark { 0%, 100% { opacity: .5; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.2); } }
 @media (prefers-reduced-motion: reduce) {
-  .sport-choice-card, .sport-art-ball, .sport-art-racket, .sport-art-spark { animation: none; transition: none; }
+  .sport-choice-card, .sport-art-ball, .sport-art-racket, .sport-art-spark, .typewriter-cursor { animation: none; transition: none; }
 }
 .venue-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .venue-card { min-width: 0; overflow: hidden; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: #ffffff; text-align: left; cursor: pointer; animation: arrive .3s ease both; transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
@@ -637,12 +640,24 @@ button:disabled { cursor: not-allowed !important; opacity: .58; }
 .venue-missing-data > svg { flex: 0 0 auto; color: #64748b; }
 .venue-missing-data strong { color: #334155; font-size: 10px; }
 .venue-missing-data p { margin: 5px 0 0; font-size: 9px; line-height: 1.55; }
-.venue-continue-card { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 24px; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: transparent; }
+.venue-court-detail-list { margin-top: 21px; }
+.venue-court-detail-list h3 { margin: 0 0 10px; color: #172554; font: 600 17px "Space Grotesk", sans-serif; }
+.venue-court-detail-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 7px 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.court-detail-name { display: grid; gap: 4px; min-width: 0; }
+.court-detail-name > strong { color: #334155; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.court-detail-name > span { color: #64748b; font-size: 11px; }
+.venue-court-detail-list article > small { grid-column: 1; color: #64748b; font-size: 11px; }
+.court-price-summary { grid-column: 2; grid-row: 1 / span 2; display: grid; justify-items: end; gap: 3px; white-space: nowrap; }
+.court-price-summary > small { color: #94a3b8; font-size: 8px; font-weight: 700; letter-spacing: .7px; }
+.court-price-summary > strong { color: #172554; font-size: 15px; }
+.court-price-summary > span { color: #64748b; font-size: 10px; }
+.venue-continue-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px 18px; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: transparent; }
 .venue-price-label { color: #94a3b8; font-size: 8px; font-weight: 700; letter-spacing: 1px; }
-.venue-continue-card > strong { color: #172554; font: 600 25px "Space Grotesk", sans-serif; }
+.venue-continue-card > .venue-price-label { grid-column: 1; grid-row: 1; }
+.venue-continue-card > strong { grid-column: 2; grid-row: 1; color: #172554; font: 600 25px "Space Grotesk", sans-serif; }
 .venue-continue-card > strong small { color: #64748b; font: 400 10px "DM Sans", sans-serif; }
-.venue-continue-card > p { flex: 1 1 220px; margin: 0; color: #64748b; font-size: 9px; line-height: 1.55; }
-.venue-continue-card > .flow-button { flex: 0 0 auto; }
+.venue-continue-card > p { grid-column: 1 / 3; grid-row: 2; margin: 0; color: #64748b; font-size: 9px; line-height: 1.55; }
+.venue-continue-card > .flow-button { grid-column: 3; grid-row: 1 / 3; }
 .venue-secure-note { display: flex; align-items: flex-start; gap: 6px; color: #94a3b8; font-size: 8px; line-height: 1.5; }
 .venue-secure-note svg { flex: 0 0 auto; color: var(--lime); }
 .availability-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 13px; }
@@ -667,6 +682,8 @@ button:disabled { cursor: not-allowed !important; opacity: .58; }
 .participant-payment-links small { overflow-wrap: anywhere; color: #64748b; font-size: 8px; }
 .participant-payment-links a { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; color: var(--lime); font-size: 8px; font-weight: 700; text-decoration: none; }
 .participant-payment-links a:hover { text-decoration: underline; }
+.demo-pay-button { min-height: 33px; flex: 0 0 auto; padding: 0 9px; font-size: 8px; }
+.demo-payment-complete { padding: 10px; border: 1px solid #a7d7b6; border-radius: 7px; color: #17613a !important; background: #effaf2; }
 .reservation-player-form { display: grid; gap: 10px; }
 .reservation-player-form .availability-card-heading { margin-bottom: 1px; }
 .player-count-note, .payment-note { margin: 0; color: #64748b; font-size: 9px; line-height: 1.5; }
@@ -714,7 +731,6 @@ button:disabled { cursor: not-allowed !important; opacity: .58; }
 @media (max-width: 650px) {
   .flow-heading h1 { font-size: 34px; letter-spacing: -1.8px; }
   .flow-heading p { font-size: 10px; }
-  .flow-location-summary { font-size: 9px; }
   .flow-steps { gap: 0; }
   .flow-step { padding: 8px 2px; }
   .flow-step small { font-size: 6px; }
@@ -730,7 +746,10 @@ button:disabled { cursor: not-allowed !important; opacity: .58; }
   .sport-choice-arrow { position: absolute; right: 14px; bottom: 14px; }
   .venue-photo { height: 155px; }
   .venue-detail-cover { min-height: 220px; padding: 14px; }
-  .venue-continue-card { align-items: stretch; flex-direction: column; gap: 9px; }
+  .venue-court-detail-list article { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .venue-court-detail-list article > small { grid-column: 1; }
+  .court-price-summary { grid-column: 1; grid-row: auto; display: flex; align-items: baseline; justify-items: start; gap: 4px 8px; white-space: normal; }
+  .venue-continue-card { display: flex; align-items: stretch; flex-direction: column; gap: 9px; }
   .venue-continue-card > .flow-button { width: 100%; }
   .venue-facts { grid-template-columns: 1fr; }
   .venue-facts > div { min-height: 0; grid-template-columns: 35px 1fr; align-items: center; column-gap: 9px; }

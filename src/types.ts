@@ -1,4 +1,5 @@
 export type Sport = "Fútbol" | "Pádel" | "Tenis";
+export const supportedSports: readonly Sport[] = ["Fútbol", "Pádel", "Tenis"];
 
 export type Complex = {
   id: string;
@@ -58,6 +59,7 @@ export type ParticipantPaymentLink = {
 
 export type ParticipantPaymentRequest = {
   reservation_id?: string;
+  demo?: boolean;
   expires_at: string;
   amount: number;
   checkout_url: string;

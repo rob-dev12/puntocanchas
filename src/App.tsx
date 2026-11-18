@@ -105,6 +105,7 @@ function App() {
           {paymentReturn && <div className="payment-return-notice" role="status"><Info size={17} /><span>Volviste desde Mercado Pago. La aprobación se confirma de forma segura cuando recibimos su notificación; este regreso por sí solo no confirma una reserva.</span></div>}
           {page === "courts" && <ReservationPathway
             complexes={data.complexes}
+            isDemoMode={appService.usesDemoData}
             onLoadCourts={appService.listCourts}
             onLoadAvailability={appService.getAvailability}
             onCreateCheckout={appService.createReservationCheckout}
@@ -123,7 +124,7 @@ function App() {
           {page === "manage" && <ManageReservationAccess onBack={() => navigate("courts")} />}
           {page === "admin" && <Suspense fallback={<p className="manage-reservation-status">Cargando panel de recintos…</p>}><VenueAdmin /></Suspense>}
         </div>
-        <footer className="footer"><span>© 2026 PUNTORESERVAS</span><span>DESCUBRE TU PRÓXIMO JUEGO</span><span className={appService.usesSupabase ? "connection-live" : "connection-demo"}><i /> {appService.usesSupabase ? "SUPABASE CONECTADO" : "SIN DATOS REMOTOS"}</span></footer>
+        <footer className="footer"><span>© 2026 PUNTORESERVAS</span><span>DESCUBRE TU PRÓXIMO JUEGO</span><span className={appService.usesSupabase ? "connection-live" : "connection-demo"}><i /> {appService.usesSupabase ? "SUPABASE CONECTADO" : appService.usesDemoData ? "DEMO LOCAL · SIN COBROS" : "SIN DATOS REMOTOS"}</span></footer>
       </main>
     </div>
   );

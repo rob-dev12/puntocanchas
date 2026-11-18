@@ -32,7 +32,7 @@ type Court = {
   close_time: string;
   is_active: boolean;
 };
-type CourtForm = Omit<Court, "id" | "price_per_player"> & { id?: string; price_per_player: number | "" };
+type CourtForm = Omit<Court, "id" | "price_per_player"> & { id?: string };
 
 const emptyPolicy: Policy = {
   min_hours_before_cancellation: 24,
@@ -48,7 +48,6 @@ const emptyCourt: CourtForm = {
   min_players: 2,
   max_players: 14,
   price_per_slot: 0,
-  price_per_player: "",
   slot_duration_minutes: 60,
   open_time: "08:00",
   close_time: "23:00",
@@ -200,7 +199,7 @@ export function VenueAdmin() {
         complex_id: complexId,
         court: {
           ...courtForm,
-          price_per_player: courtForm.price_per_player === "" ? null : Number(courtForm.price_per_player),
+          price_per_player: null,
         },
       });
       setCourtForm(emptyCourt);
@@ -216,10 +215,16 @@ export function VenueAdmin() {
 
   const editCourt = (court: Court) => {
     setCourtForm({
-      ...court,
+      id: court.id,
+      name: court.name,
+      sport: court.sport,
+      min_players: court.min_players,
+      max_players: court.max_players,
+      price_per_slot: court.price_per_slot,
       open_time: court.open_time.slice(0, 5),
       close_time: court.close_time.slice(0, 5),
-      price_per_player: court.price_per_player ?? "",
+      slot_duration_minutes: court.slot_duration_minutes,
+      is_active: court.is_active,
     });
     setEditingCourt(true);
   };
@@ -286,7 +291,7 @@ export function VenueAdmin() {
             <div className="availability-card-heading"><span className="flow-icon"><Building2 size={18} /></span><div><strong>Canchas y horarios</strong><small>La disponibilidad se repite todos los días</small></div></div>
             {courts.length ? <div className="admin-court-list">{courts.map((court) => <article key={court.id}>
               <div><strong>{court.name}</strong><span className={court.is_active ? "court-active-label" : "court-inactive-label"}>{court.is_active ? "Activa" : "Inactiva"}</span><small>{court.sport} · {court.min_players}–{court.max_players} participantes</small></div>
-              <p>{court.open_time.slice(0, 5)}–{court.close_time.slice(0, 5)} · {court.slot_duration_minutes} min · {court.price_per_player !== null ? `${court.price_per_player} CLP / jugador` : `${court.price_per_slot} CLP / cancha`}</p>
+              <p>{court.open_time.slice(0, 5)}–{court.close_time.slice(0, 5)} · {court.slot_duration_minutes} min · {court.price_per_slot.toLocaleString("es-CL")} CLP total por cancha</p>
               <div className="managed-actions"><button type="button" className="flow-button flow-button-outline" onClick={() => editCourt(court)}>Editar</button><button type="button" className="flow-button flow-button-outline" disabled={loading} onClick={() => void setCourtActive(court)}>{court.is_active ? "Desactivar" : "Activar"}</button></div>
             </article>)}</div> : <p className="no-recorded-times">No hay canchas configuradas. Agrega una para habilitar reservas.</p>}
             <button type="button" className="flow-button flow-button-outline" onClick={() => { setCourtForm(emptyCourt); setEditingCourt(false); }}>+ Agregar cancha</button>
@@ -298,11 +303,11 @@ export function VenueAdmin() {
                 <label>Mínimo de jugadores<input type="number" min={1} max={14} required value={courtForm.min_players} onChange={(event) => setCourtForm((current) => ({ ...current, min_players: Number(event.target.value) }))} /></label>
                 <label>Máximo de jugadores<input type="number" min={1} max={14} required value={courtForm.max_players} onChange={(event) => setCourtForm((current) => ({ ...current, max_players: Number(event.target.value) }))} /></label>
                 <label>Duración (minutos)<input type="number" min={15} max={720} step={15} required value={courtForm.slot_duration_minutes} onChange={(event) => setCourtForm((current) => ({ ...current, slot_duration_minutes: Number(event.target.value) }))} /></label>
-                <label>Precio por cancha (CLP)<input type="number" min={0} step={1} value={courtForm.price_per_slot} onChange={(event) => setCourtForm((current) => ({ ...current, price_per_slot: Number(event.target.value) }))} /></label>
-                <label>Precio por jugador (CLP, opcional)<input type="number" min={0} step={1} value={courtForm.price_per_player} onChange={(event) => setCourtForm((current) => ({ ...current, price_per_player: event.target.value === "" ? "" : Number(event.target.value) }))} /></label>
+                <label>Precio total por cancha (CLP)<input type="number" min={1} step={1} required value={courtForm.price_per_slot} onChange={(event) => setCourtForm((current) => ({ ...current, price_per_slot: Number(event.target.value) }))} /></label>
                 <label>Abre<input type="time" required value={courtForm.open_time} onChange={(event) => setCourtForm((current) => ({ ...current, open_time: event.target.value }))} /></label>
                 <label>Cierra<input type="time" required value={courtForm.close_time} onChange={(event) => setCourtForm((current) => ({ ...current, close_time: event.target.value }))} /></label>
               </div>
+              <p className="payment-note">El total del bloque se reparte entre los participantes al reservar.</p>
               <div className="managed-actions"><button type="submit" className="button button-lime" disabled={loading}><Save size={15} /> Guardar cancha</button>{editingCourt && <button type="button" className="flow-button flow-button-outline" onClick={() => { setCourtForm(emptyCourt); setEditingCourt(false); }}>Cancelar edición</button>}</div>
             </form>
           </section>

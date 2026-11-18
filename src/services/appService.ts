@@ -1,4 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { demoComplexes, demoCourts } from "../data/demoReservationData";
+import { splitAmount } from "../utils/splitAmount";
 import {
   seedData,
   type Action,
@@ -18,6 +20,7 @@ const storageKey = "cancha-reserva-demo-v2";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 const isConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+const isLocalDemo = import.meta.env.DEV && !isConfigured;
 
 let client: SupabaseClient | null = null;
 let currentData: AppData | null = null;
@@ -46,6 +49,26 @@ function readDemoData(): AppData {
 
 function saveDemoData(data: AppData): void {
   localStorage.setItem(storageKey, JSON.stringify(data));
+}
+
+function chileLocalTime(): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Santiago",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date());
+}
+
+function chileLocalDate(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Santiago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 function asSport(value: string): Sport {
@@ -124,10 +147,16 @@ async function invokeFunction<T>(name: string, body: Record<string, unknown>): P
 
 export const appService = {
   usesSupabase: isConfigured,
+  usesDemoData: isLocalDemo,
 
   async load(): Promise<AppData> {
     if (loadingData) return loadingData;
-    loadingData = isConfigured ? loadRemoteData() : Promise.resolve(readDemoData());
+    loadingData = isConfigured
+      ? loadRemoteData()
+      : Promise.resolve({
+        ...readDemoData(),
+        complexes: isLocalDemo ? demoComplexes : [],
+      });
     try {
       currentData = await loadingData;
       return currentData;
@@ -172,6 +201,7 @@ export const appService = {
 
   async listCourts(complexIds: string[]): Promise<Court[]> {
     if (!complexIds.length) return [];
+    if (isLocalDemo) return demoCourts.filter((court) => complexIds.includes(court.complexId));
     const { data, error } = await getClient()
       .from("courts")
       .select("id, complex_id, name, sport, min_players, max_players, price_per_slot, price_per_player, slot_duration_minutes, open_time, close_time")
@@ -195,6 +225,27 @@ export const appService = {
   },
 
   async getAvailability(complexId: string, courtId: string, reservationDate: string): Promise<AvailabilitySlot[]> {
+    if (isLocalDemo) {
+      const court = demoCourts.find((item) => item.id === courtId && item.complexId === complexId);
+      if (!court) throw new Error("No se encontró la cancha de prueba.");
+      const [openHour, openMinute] = court.openTime.split(":").map(Number);
+      const [closeHour, closeMinute] = court.closeTime.split(":").map(Number);
+      const duration = court.slotDurationMinutes;
+      const now = chileLocalTime();
+      const currentDay = reservationDate === chileLocalDate();
+      const slots: AvailabilitySlot[] = [];
+      for (let minute = openHour * 60 + openMinute; minute + duration <= closeHour * 60 + closeMinute; minute += duration) {
+        const start = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+        const endMinute = minute + duration;
+        const end = `${String(Math.floor(endMinute / 60)).padStart(2, "0")}:${String(endMinute % 60).padStart(2, "0")}`;
+        slots.push({
+          start_time: start,
+          end_time: end,
+          status: !currentDay || start > now ? "available" : "unavailable",
+        });
+      }
+      return slots;
+    }
     const response = await invokeFunction<{ slots: AvailabilitySlot[] }>("get-availability", {
       complex_id: complexId,
       court_id: courtId,
@@ -211,6 +262,32 @@ export const appService = {
     startTime: string;
     players: ReservationPlayerInput[];
   }): Promise<ParticipantPaymentRequest & { reservation_id: string }> {
+    if (isLocalDemo) {
+      const court = demoCourts.find((item) => item.id === input.courtId && item.complexId === input.complexId);
+      if (!court) throw new Error("No se encontró la cancha de prueba.");
+      if (input.players.length < court.minPlayers || input.players.length > court.maxPlayers) {
+        throw new Error("La cantidad de participantes no corresponde a la cancha de prueba.");
+      }
+      if (input.reservationDate < chileLocalDate()) throw new Error("La fecha de prueba debe ser hoy o posterior.");
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      const participantAmounts = splitAmount(court.pricePerSlot, input.players.length);
+      const paymentLinks = input.players.map((player, index) => ({
+        player_id: `demo-player-${index + 1}`,
+        full_name: player.full_name,
+        email: player.email,
+        amount: participantAmounts[index],
+        checkout_url: "",
+      }));
+      return {
+        reservation_id: `demo-reservation-${Date.now()}`,
+        demo: true,
+        expires_at: expiresAt,
+        amount: paymentLinks.reduce((total, link) => total + link.amount, 0),
+        checkout_url: "",
+        payment_links: paymentLinks,
+        email_pending: true,
+      };
+    }
     return invokeFunction("create-reservation-checkout", {
       complex_id: input.complexId,
       court_id: input.courtId,
